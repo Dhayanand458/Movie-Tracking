@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Movie Tracker Dashboard</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="firebase-config.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header Section -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="header-left">
+                    <div class="app-logo">
+                        <i class="fas fa-film"></i>
+                        <h1>Movie Tracker</h1>
+                    </div>
+                    <div class="header-subtitle">Your personal cinema journey</div>
+                </div>
+                <div class="header-right">
+                    <div class="stats-card">
+                        <div class="stat-item">
+                            <span class="stat-number" id="totalMovies">0</span>
+                            <span class="stat-label">Movies</span>
+                        </div>
+                        <div class="stat-divider"></div>
+                        <div class="stat-item">
+                            <span class="stat-number" id="totalDays">0</span>
+                            <span class="stat-label">Days</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="content-wrapper">
+                <!-- Action Bar -->
+                <div class="action-bar">
+                    <button id="addEntryBtn" class="add-btn">
+                        <i class="fas fa-plus"></i>
+                        <span>Add Movie</span>
+                        <div class="btn-glow"></div>
+                    </button>
+                    <div class="search-container">
+                        <i class="fas fa-search"></i>
+                        <input type="text" placeholder="Search your movies..." class="search-input" id="searchInput">
+                    </div>
+                </div>
+
+                <!-- Entries Grid -->
+                <div class="entries-grid" id="entriesContainer">
+                    <!-- Entries will be populated here -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Message Popup -->
+    <div id="messagePopup" class="popup-overlay">
+        <div class="popup-container">
+            <div class="popup-header">
+                <h2 id="popupTitle" class="popup-title">
+                    <i class="fas fa-comments"></i>
+                    <span></span>
+                </h2>
+                <button id="closePopupBtn" class="close-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="popup-content">
+                <div id="messagesList" class="messages-list">
+                    <!-- Messages will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Background Elements -->
+    <div class="bg-gradient"></div>
+    <div class="bg-pattern"></div>
+
+    <script>
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // DOM Elements
+        const entriesContainer = document.getElementById('entriesContainer');
+        const addEntryBtn = document.getElementById('addEntryBtn');
+        const messagePopup = document.getElementById('messagePopup');
+        const popupTitle = document.getElementById('popupTitle');
+        const messagesList = document.getElementById('messagesList');
+        const closePopupBtn = document.getElementById('closePopupBtn');
+        const searchInput = document.getElementById('searchInput');
+        const totalMoviesEl = document.getElementById('totalMovies');
+        const totalDaysEl = document.getElementById('totalDays');
+
+        // Global Variables
+        let entries = {};
+        let dayCounters = {};
+
+        // Load initial data from Firebase
+        database.ref('entries').on('value', (snapshot) => {
+            entries = snapshot.val() || {};
+            renderEntries();
+            updateStats();
+        });
+
+        database.ref('dayCounters').on('value', (snapshot) => {
+            dayCounters = snapshot.val() || {};
+            renderEntries();
+            updateStats();
+        });
+
+        // Add new entry
+        addEntryBtn.addEventListener('click', () => {
+            const newSerial = Object.keys(entries).length + 1;
+            const entryId = `entry${newSerial}`;
+            
+            database.ref(`entries/${entryId}`).set({
+                serial: newSerial,
+                name: `Movie ${newSerial}`,
+                createdAt: new Date().toISOString()
+            });
+
+            database.ref(`dayCounters/${entryId}`).set({
+                days: 0,
+                lastUpdated: new Date().toISOString()
+            });
+        });
+
+        // Search functionality
+        searchInput.addEventListener('input', () => {
+            renderEntries(searchInput.value.toLowerCase());
+        });
+
+        // Update stats
+        function updateStats() {
+            const movieCount = Object.keys(entries).length;
+            const totalDays = Object.values(dayCounters).reduce((sum, counter) => sum + (counter.days || 0), 0);
+            
+            animateNumber(totalMoviesEl, movieCount);
+            animateNumber(totalDaysEl, totalDays);
+        }
+
+        function animateNumber(element, target) {
+            const current = parseInt(element.textContent) || 0;
+            const increment = target > current ? 1 : -1;
+            
+            if (current !== target) {
+                element.textContent = current + increment;
+                setTimeout(() => animateNumber(element, target), 50);
+            }
+        }
+
+        // Render all entries
+        function renderEntries(searchTerm = '') {
+            entriesContainer.innerHTML = '';
+            
+            // Sort entries by serial number
+            const sortedEntries = Object.entries(entries).sort((a, b) => a[1].serial - b[1].serial);
+            
+            // Filter entries based on search term
+            const filteredEntries = sortedEntries.filter(([entryId, entry]) => 
+                entry.name.toLowerCase().includes(searchTerm)
+            );
+            
+            filteredEntries.forEach(([entryId, entry], index) => {
+                const entryCard = document.createElement('div');
+                entryCard.className = 'movie-card';
+                entryCard.id = entryId;
+                entryCard.style.animationDelay = `${index * 0.1}s`;
+                
+                const dayCounter = dayCounters[entryId] ? dayCounters[entryId].days : 0;
+                const dayProgress = Math.min((dayCounter / 30) * 100, 100); // Assuming 30 days is max for visual
+                
+                entryCard.innerHTML = `
+                    <div class="card-header">
+                        <div class="serial-badge">${entry.serial}</div>
+                        <div class="movie-actions">
+                            <button class="action-btn view-messages-btn" title="View Messages">
+                                <i class="fas fa-comment-dots"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="card-content">
+                        <div class="movie-input-container">
+                            <input type="text" class="movie-name-input" value="${entry.name}" placeholder="Enter movie name...">
+                            <div class="input-underline"></div>
+                        </div>
+                        
+                        <div class="day-counter-section">
+                            <div class="day-info">
+                                <span class="day-label">Progress</span>
+                                <span class="day-count">Day ${dayCounter}</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${dayProgress}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="action-btn primary-btn done-btn">
+                            <i class="fas fa-check"></i>
+                            <span>Complete</span>
+                        </button>
+                        <button class="action-btn secondary-btn not-done-btn">
+                            <i class="fas fa-redo"></i>
+                            <span>Reset</span>
+                        </button>
+                    </div>
+                `;
+                
+                // Add event listeners
+                const nameInput = entryCard.querySelector('.movie-name-input');
+                nameInput.addEventListener('change', () => {
+                    database.ref(`entries/${entryId}/name`).set(nameInput.value);
+                });
+                
+                nameInput.addEventListener('focus', () => {
+                    entryCard.classList.add('input-focused');
+                });
+                
+                nameInput.addEventListener('blur', () => {
+                    entryCard.classList.remove('input-focused');
+                });
+                
+                const doneBtn = entryCard.querySelector('.done-btn');
+                doneBtn.addEventListener('click', () => {
+                    if (confirm('Are you sure you want to mark this as done and delete the entry?')) {
+                        deleteEntry(entryId);
+                    }
+                });
+                
+                const notDoneBtn = entryCard.querySelector('.not-done-btn');
+                notDoneBtn.addEventListener('click', () => {
+                    if (confirm('Reset day counter to 0?')) {
+                        resetCounter(entryId);
+                    }
+                });
+                
+                const viewMessagesBtn = entryCard.querySelector('.view-messages-btn');
+                viewMessagesBtn.addEventListener('click', () => {
+                    showMessages(entry.name, `movie${entry.serial}`);
+                });
+                
+                entriesContainer.appendChild(entryCard);
+            });
+            
+            // Start day counter updates
+            updateDayCounters();
+        }
+
+        function deleteEntry(entryId) {
+            if (confirm('Are you sure you want to mark this as done and delete the entry?')) {
+                // First get the serial number of the entry being deleted
+                const deletedSerial = entries[entryId].serial;
+                
+                // Delete the entry and its day counter
+                database.ref(`entries/${entryId}`).remove();
+                database.ref(`dayCounters/${entryId}`).remove();
+                
+                // Also remove any messages for this movie
+                database.ref(`messages/movie${deletedSerial}`).remove();
+                
+                // Update serial numbers of remaining entries
+                const updates = {};
+                Object.entries(entries).forEach(([id, entry]) => {
+                    if (entry.serial > deletedSerial) {
+                        updates[`entries/${id}/serial`] = entry.serial - 1;
+                    }
+                });
+                
+                // Apply all updates at once
+                if (Object.keys(updates).length > 0) {
+                    database.ref().update(updates);
+                }
+            }
+        }
+
+        // Reset day counter
+        function resetCounter(entryId) {
+            database.ref(`dayCounters/${entryId}`).set({
+                days: 0,
+                lastUpdated: new Date().toISOString()
+            });
+        }
+
+        // Update day counters (runs every minute to check for midnight)
+        function updateDayCounters() {
+            const now = new Date();
+            
+            Object.entries(dayCounters).forEach(([entryId, counter]) => {
+                const lastUpdated = new Date(counter.lastUpdated);
+                const days = counter.days;
+                
+                // Check if a new day has passed since last update
+                if (now.getDate() !== lastUpdated.getDate() && now.getHours() >= 0) {
+                    database.ref(`dayCounters/${entryId}`).set({
+                        days: days + 1,
+                        lastUpdated: now.toISOString()
+                    });
+                }
+            });
+            
+            // Check again in 1 minute
+            setTimeout(updateDayCounters, 60000);
+        }
+
+        // Show messages for a movie
+        function showMessages(movieName, movieRef) {
+            popupTitle.querySelector('span').textContent = `Messages for ${movieName}`;
+            messagesList.innerHTML = '';
+            
+            database.ref(`messages/${movieRef}`).on('value', (snapshot) => {
+                const messages = snapshot.val() || {};
+                messagesList.innerHTML = '';
+                
+                // Sort messages by timestamp
+                const sortedMessages = Object.entries(messages)
+                    .map(([id, msg]) => ({ id, ...msg }))
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                
+                if (sortedMessages.length === 0) {
+                    messagesList.innerHTML = `
+                        <div class="no-messages">
+                            <i class="fas fa-comment-slash"></i>
+                            <p>No messages yet</p>
+                            <span>Messages will appear here when available</span>
+                        </div>
+                    `;
+                } else {
+                    sortedMessages.forEach(msg => {
+                        const msgDiv = document.createElement('div');
+                        msgDiv.className = 'message-item';
+                        msgDiv.innerHTML = `
+                            <div class="message-time">${new Date(msg.timestamp).toLocaleString()}</div>
+                            <div class="message-text">${msg.text}</div>
+                        `;
+                        messagesList.appendChild(msgDiv);
+                    });
+                }
+            });
+            
+            messagePopup.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        // Close message popup
+        closePopupBtn.addEventListener('click', () => {
+            messagePopup.classList.remove('show');
+            document.body.style.overflow = 'auto';
+        });
+
+        // Close popup when clicking outside
+        messagePopup.addEventListener('click', (e) => {
+            if (e.target === messagePopup) {
+                messagePopup.classList.remove('show');
+                document.body.style.overflow = 'auto';
+            }
+        });
+
+        if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(reg => console.log('Service worker registered.', reg));
+    }
+    </script>
+</body>
+</html>
