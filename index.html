@@ -105,10 +105,13 @@
         // Global Variables
         let entries = {};
         let dayCounters = {};
+        let nextSerialNumber = 1;
+        let isCreatingEntry = false;
 
         // Load initial data from Firebase
         database.ref('entries').on('value', (snapshot) => {
             entries = snapshot.val() || {};
+            calculateNextSerialNumber();
             renderEntries();
             updateStats();
         });
@@ -119,21 +122,64 @@
             updateStats();
         });
 
-        // Add new entry
-        addEntryBtn.addEventListener('click', () => {
-            const newSerial = Object.keys(entries).length + 1;
-            const entryId = `entry${newSerial}`;
+        // Calculate the next available serial number
+        function calculateNextSerialNumber() {
+            if (Object.keys(entries).length === 0) {
+                nextSerialNumber = 1;
+                return;
+            }
             
-            database.ref(`entries/${entryId}`).set({
-                serial: newSerial,
-                name: `Movie ${newSerial}`,
-                createdAt: new Date().toISOString()
-            });
+            const existingSerials = Object.values(entries).map(entry => entry.serial);
+            nextSerialNumber = Math.max(...existingSerials) + 1;
+        }
 
-            database.ref(`dayCounters/${entryId}`).set({
-                days: 0,
-                lastUpdated: new Date().toISOString()
-            });
+        // Generate unique entry ID
+        function generateEntryId() {
+            return 'entry_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Add new entry
+        addEntryBtn.addEventListener('click', async () => {
+            if (isCreatingEntry) {
+                console.log('Already creating an entry, please wait...');
+                return;
+            }
+
+            isCreatingEntry = true;
+            addEntryBtn.disabled = true;
+            addEntryBtn.style.opacity = '0.6';
+
+            try {
+                const entryId = generateEntryId();
+                const currentSerial = nextSerialNumber;
+                
+                // Create the entry
+                await database.ref(`entries/${entryId}`).set({
+                    serial: currentSerial,
+                    name: `Movie ${currentSerial}`,
+                    createdAt: new Date().toISOString()
+                });
+
+                // Create the day counter
+                await database.ref(`dayCounters/${entryId}`).set({
+                    days: 0,
+                    lastUpdated: new Date().toISOString()
+                });
+
+                // Increment for next entry
+                nextSerialNumber++;
+                
+                console.log(`Created entry ${entryId} with serial ${currentSerial}`);
+            } catch (error) {
+                console.error('Error creating entry:', error);
+            } finally {
+                // Re-enable button after a short delay
+                setTimeout(() => {
+                    isCreatingEntry = false;
+                    addEntryBtn.disabled = false;
+                    addEntryBtn.style.opacity = '1';
+                }, 500);
+            }
         });
 
         // Search functionality
@@ -260,30 +306,29 @@
             updateDayCounters();
         }
 
-        function deleteEntry(entryId) {
-            if (confirm('Are you sure you want to mark this as done and delete the entry?')) {
-                // First get the serial number of the entry being deleted
+        async function deleteEntry(entryId) {
+            if (!confirm('Are you sure you want to mark this as done and delete the entry?')) {
+                return;
+            }
+
+            try {
+                // Get the serial number of the entry being deleted
                 const deletedSerial = entries[entryId].serial;
                 
                 // Delete the entry and its day counter
-                database.ref(`entries/${entryId}`).remove();
-                database.ref(`dayCounters/${entryId}`).remove();
+                await database.ref(`entries/${entryId}`).remove();
+                await database.ref(`dayCounters/${entryId}`).remove();
                 
                 // Also remove any messages for this movie
-                database.ref(`messages/movie${deletedSerial}`).remove();
+                await database.ref(`messages/movie${deletedSerial}`).remove();
                 
-                // Update serial numbers of remaining entries
-                const updates = {};
-                Object.entries(entries).forEach(([id, entry]) => {
-                    if (entry.serial > deletedSerial) {
-                        updates[`entries/${id}/serial`] = entry.serial - 1;
-                    }
-                });
+                console.log(`Deleted entry ${entryId} with serial ${deletedSerial}`);
                 
-                // Apply all updates at once
-                if (Object.keys(updates).length > 0) {
-                    database.ref().update(updates);
-                }
+                // Note: We don't need to update serial numbers of other entries
+                // Each entry keeps its original serial number for consistency
+                
+            } catch (error) {
+                console.error('Error deleting entry:', error);
             }
         }
 
@@ -370,9 +415,9 @@
         });
 
         if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('service-worker.js')
-        .then(reg => console.log('Service worker registered.', reg));
-    }
+            navigator.serviceWorker.register('service-worker.js')
+                .then(reg => console.log('Service worker registered.', reg));
+        }
     </script>
 </body>
 </html>
