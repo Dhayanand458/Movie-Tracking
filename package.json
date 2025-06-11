@@ -5,8 +5,8 @@
   "main": "index.html",
   "scripts": {
     "build": "echo 'Static site - no build needed' && exit 0",
-    "start": "python3 -m http.server 3000",
-    "dev": "python3 -m http.server 3000"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "keywords": ["movie", "tracker", "firebase", "dashboard"],
   "author": "",
