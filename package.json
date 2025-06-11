@@ -1,0 +1,16 @@
+{
+  "name": "movie-tracker",
+  "version": "1.0.0",
+  "description": "A personal movie tracking dashboard",
+  "main": "index.html",
+  "scripts": {
+    "build": "echo 'Static site - no build needed' && exit 0",
+    "start": "python3 -m http.server 3000",
+    "dev": "python3 -m http.server 3000"
+  },
+  "keywords": ["movie", "tracker", "firebase", "dashboard"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {},
+  "dependencies": {}
+}
