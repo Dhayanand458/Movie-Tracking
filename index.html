@@ -105,15 +105,15 @@
         // Global Variables
         let entries = {};
         let dayCounters = {};
-        let nextSerialNumber = 1;
         let isCreatingEntry = false;
+        let isInitialized = false;
 
         // Load initial data from Firebase
         database.ref('entries').on('value', (snapshot) => {
             entries = snapshot.val() || {};
-            calculateNextSerialNumber();
             renderEntries();
             updateStats();
+            isInitialized = true;
         });
 
         database.ref('dayCounters').on('value', (snapshot) => {
@@ -123,14 +123,13 @@
         });
 
         // Calculate the next available serial number
-        function calculateNextSerialNumber() {
+        function getNextSerialNumber() {
             if (Object.keys(entries).length === 0) {
-                nextSerialNumber = 1;
-                return;
+                return 1;
             }
             
             const existingSerials = Object.values(entries).map(entry => entry.serial);
-            nextSerialNumber = Math.max(...existingSerials) + 1;
+            return Math.max(...existingSerials) + 1;
         }
 
         // Generate unique entry ID
@@ -145,13 +144,20 @@
                 return;
             }
 
+            if (!isInitialized) {
+                console.log('Still loading data, please wait...');
+                return;
+            }
+
             isCreatingEntry = true;
             addEntryBtn.disabled = true;
             addEntryBtn.style.opacity = '0.6';
 
             try {
                 const entryId = generateEntryId();
-                const currentSerial = nextSerialNumber;
+                const currentSerial = getNextSerialNumber();
+                
+                console.log(`Creating entry with serial: ${currentSerial}`);
                 
                 // Create the entry
                 await database.ref(`entries/${entryId}`).set({
@@ -165,11 +171,8 @@
                     days: 0,
                     lastUpdated: new Date().toISOString()
                 });
-
-                // Increment for next entry
-                nextSerialNumber++;
                 
-                console.log(`Created entry ${entryId} with serial ${currentSerial}`);
+                console.log(`Successfully created entry ${entryId} with serial ${currentSerial}`);
             } catch (error) {
                 console.error('Error creating entry:', error);
             } finally {
